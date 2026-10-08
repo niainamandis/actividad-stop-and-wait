@@ -1,0 +1,1 @@
+Este es un mensaje de prueba para la actividad de Stop and Wait. Si el servidor lo imprime completo, todo llegó bien.

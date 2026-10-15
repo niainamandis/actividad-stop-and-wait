@@ -12,6 +12,9 @@ class SocketTCP:
     self.seq = None # se define en el handshake
     # nuevos para stop&wait
     self.timeout = 0.5 
+    self.msg_len = None # se define al llegar un msje
+    self.msg_received = 0
+    self.rec_buff = b""
 
   def bind(self, address):
     self.udp_socket.bind(address)
@@ -52,7 +55,7 @@ class SocketTCP:
     new_sock = SocketTCP()
     new_sock.bind((self.origin_address[0], 0))
     new_sock.origin_address = new_sock.udp_socket.getsockname()
-    new_sock.dest_address = client_addresr
+    new_sock.dest_address = client_address
     new_sock.seq = random.randint(0, 100)
     seg_resp = {
         "SYN": 1, "ACK": 1, "FIN": 0,
@@ -86,8 +89,8 @@ class SocketTCP:
           if seg["ACK"] == 1 and addr == self.dest_address:
             self.seq+=1
             break
-          except socket.timeout:
-            pass # reintenta
+        except socket.timeout:
+          pass # reintenta
 
     # enviar el tamaño en bytes
     msglen = len(message)
@@ -100,6 +103,39 @@ class SocketTCP:
       _send(chunk)
 
     self.udp_socket.settimeout(None)
+
+  def recv(self, buff_size):
+    read_buff_size = self.HEADER_SIZE + 16 
+    # no sabemos el tam, entonces viene en el primer msje
+    if self.msg_len is None:
+      while True:
+        seg_bytes, addr = self.udp_socket.recvfrom(read_buff_size)
+        seg = self.parse_segment(seg_bytes)
+        if (seg["SYN"] == 0 and seg["ACK"] == 0 and seg["FIN"] == 0):
+          self.msg_len = int.from_bytes(seg["DATOS"], "big")
+          ack = self.create_segment({
+              "SYN": 0, "ACK": 1, "FIN": 0,
+              "SEQ": self.seq, "DATOS": b""
+              })
+          self.udp_socket.sendto(ack, self.dest_address)
+          self.seq+=1
+          break
+    recibo = min(self.msg_len - (self.msg_received - len(self.rec_buff)), buff_size)
+    while len(self.rec_buff) < recibo and self.msg_received < self.msg_len:
+      seg_bytes, addr = self.udp_socket.recvfrom(read_buff_size)
+      seg = self.parse_segment(seg_bytes)
+      if (seg["SYN"] == 0 and seg["ACK"] == 0 and seg["FIN"] == 0):
+        self.rec_buff += seg["DATOS"]
+        self.msg_received += len(seg["DATOS"])
+        ack = self.create_segment({
+            "SYN": 0, "ACK": 1, "FIN": 0,
+            "SEQ": self.seq, "DATOS": b""
+            })
+        self.udp_socket.sendto(ack, self.dest_address)
+        self.seq+=1
+    devolver = self.rec_buff[:buff_size]
+    self.rec_buff = self.rec_buff[buff_size:]
+    return devolver
 
   @staticmethod
   def parse_segment(segment_bytes): 

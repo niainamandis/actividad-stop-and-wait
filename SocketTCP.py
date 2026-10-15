@@ -49,6 +49,7 @@ class SocketTCP:
         "SYN": 0, "ACK": 1, "FIN": 0,
         "SEQ": self.seq, "DATOS": b""
         })
+    #--- LÍNEA A COMENTAR PARA INDUCIR PÉRDIDAS EN TEST DE CASO BORDE ---#
     self.udp_socket.sendto(seg_2, self.dest_address)
 
   def accept(self):
@@ -72,6 +73,7 @@ class SocketTCP:
     new_sock.udp_socket.settimeout(self.timeout)
 
     # esperar el ACK = 1
+    # ------ MOD CASO BORDE AQUÍ :d ------ # 
     while True:
       new_sock.udp_socket.sendto(seg_resp, client_address)
       try:
@@ -80,6 +82,15 @@ class SocketTCP:
         if (seg_2["ACK"] == 1 and addr == client_address):
           new_sock.seq += 1
           break
+        elif seg_2["SYN"] == 0 and seg_2["ACK"] == 0 and seg_2["FIN"] == 0:
+            new_sock.msg_len = int.from_bytes(seg_2["DATOS"], "big")
+            ack_msg = new_sock.create_segment({
+                "SYN": 0, "ACK": 1, "FIN": 0,
+                "SEQ": new_sock.seq, "DATOS": b""
+            })
+            new_sock.udp_socket.sendto(ack_msg, new_sock.dest_address)
+            new_sock.seq += 1
+            break
       except socket.timeout:
         pass
     new_sock.udp_socket.settimeout(None)
@@ -205,7 +216,8 @@ class SocketTCP:
     self.udp_socket.settimeout(self.timeout)
 
     # esperar ack de A
-    while True:
+    intentos = 0
+    while intentos < 3:
       self.udp_socket.sendto(fin, self.dest_address)
       try:
         seg_bytes, addr = self.udp_socket.recvfrom(buff_size)
@@ -214,7 +226,7 @@ class SocketTCP:
           self.seq += seg["SEQ"] + 1
           break
       except socket.timeout:
-        pass
+        intentos+=1
     
     self.udp_socket.settimeout(None)
     self.udp_socket.close()

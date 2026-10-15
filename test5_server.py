@@ -15,3 +15,8 @@ print(f"[Servidor] Parte 2 (len={len(parte2)}): {parte2}")
 
 mensaje_total = parte1 + parte2
 print(f"[Servidor] Total recibido (len={len(mensaje_total)}): {mensaje_total.decode()}")
+
+print("[Servidor] Esperando cierre de conexión...")
+connection_socketTCP.recv_close()
+print("[Servidor] Conexión cerrada exitosamente.")
+server_socket.udp_socket.close()

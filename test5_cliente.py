@@ -7,4 +7,6 @@ client_socket.connect(server_address)
 mensaje = b"A" * 50
 print(f"[Cliente] Enviando {len(mensaje)} bytes con Stop & Wait...")
 client_socket.send(mensaje)
-print("[Cliente] Envío finalizado con éxito.")
+print("[Cliente] Cerrando conexión...")
+client_socket.close()
+print("[Cliente] Conexión cerrada exitosamente.")

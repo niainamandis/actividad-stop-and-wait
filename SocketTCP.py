@@ -72,32 +72,11 @@ class SocketTCP:
 
   def send(self, message):
     self.udp_socket.settimeout(self.timeout)
-    buff_size = self.HEADER_SIZE + 16 
-    msglen = len(message)
-    payload = msglen.to_bytes(4, "big")
-
-    # enviar el tamaño en bytes
-    tmp = self.create_segment({
-        "SYN": 0, "ACK": 0, "FIN": 0,
-        "SEQ": self.seq, "DATOS": payload
-        })
-    while True:
-      self.udp_socket.sendto(tmp, self.dest_address)
-      try:
-        data, addr = self.udp_socket.recvfrom(buff_size)
-        seg = self.parse_segment(data)
-        if seg["ACK"] == 1 and addr == self.dest_address:
-          self.seq+=1
-          break
-        except socket.timeout:
-          pass # reintenta
-
-    for i in range(0, msglen, 16):
-      # trozos de 16 bytes a lo más para enviar msje
-      chunk = message[i:i + 16]
+    def _send(payload):
+      buff_size = self.HEADER_SIZE + 16 
       tmp = self.create_segment({
           "SYN": 0, "ACK": 0, "FIN": 0,
-          "SEQ": self.seq, "DATOS": chunk
+          "SEQ": self.seq, "DATOS": payload
           })
       while True:
         self.udp_socket.sendto(tmp, self.dest_address)
@@ -109,6 +88,17 @@ class SocketTCP:
             break
           except socket.timeout:
             pass # reintenta
+
+    # enviar el tamaño en bytes
+    msglen = len(message)
+    payload = msglen.to_bytes(4, "big")
+    _send(payload)
+
+    for i in range(0, msglen, 16):
+      # trozos de 16 bytes a lo más para enviar msje
+      chunk = message[i:i + 16]
+      _send(chunk)
+
     self.udp_socket.settimeout(None)
 
   @staticmethod

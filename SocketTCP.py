@@ -157,22 +157,27 @@ class SocketTCP:
             "SYN": 0, "ACK": 0, "FIN": 1,
             "SEQ": self.seq, "DATOS": b""
       })
-    self.udp_socket.sendto(fin, self.dest_address)
+    self.udp_socket.settimeout(self.timeout)
 
     # esperar fin y ack de b
     while True:
-      seg_bytes, addr = self.udp_socket.recvfrom(buff_size)
-      seg = self.parse_segment(seg_bytes)
-      if seg["ACK"] == 1 and seg["FIN"] == 1 and addr == self.dest_address:
-        self.seq = seg["SEQ"] + 1
-        break
+      self.udp_socket.sendto(fin, self.dest_address)
+      try:
+        seg_bytes, addr = self.udp_socket.recvfrom(buff_size)
+        seg = self.parse_segment(seg_bytes)
+        if seg["ACK"] == 1 and seg["FIN"] == 1 and addr == self.dest_address:
+          self.seq = seg["SEQ"] + 1
+          break
+      except socket.timeout:
+        pass
 
     # enviar ack final
     fin_final = self.create_segment({
             "SYN": 0, "ACK": 1, "FIN": 0,
             "SEQ": self.seq, "DATOS": b""
       })
-    self.udp_socket.sendto(fin_final, self.dest_address)
+    for _ in range(3):
+      self.udp_socket.sendto(fin_final, self.dest_address)
     self.udp_socket.close()
 
   def recv_close(self):
@@ -182,25 +187,36 @@ class SocketTCP:
     while True:
       seg_bytes, addr = self.udp_socket.recvfrom(buff_size)
       seg = self.parse_segment(seg_bytes)
-      if seg["FIN"] == 1 and seg["ACK"] == 1 and addr == self.dest_address:
+      if seg["FIN"] == 1 and seg["ACK"] == 0 and addr == self.dest_address:
         self.seq = seg["SEQ"] + 1;
         break
+      elif seg["FIN"] == 0 and seg["SYN"] == 0 and seg["ACK"] == 0 and addr == self.dest_address:
+        ack_resend = self.create_segment({
+            "SYN": 0, "ACK": 1, "FIN": 0,
+            "SEQ": self.seq, "DATOS": b""
+        })
+        self.udp_socket.sendto(ack_resend, self.dest_address)
 
     # enviar fin + ack final
     fin = self.create_segment({
             "SYN": 0, "ACK": 1, "FIN": 1,
             "SEQ": self.seq, "DATOS": b""
       })
-    self.udp_socket.sendto(fin, self.dest_address)
+    self.udp_socket.settimeout(self.timeout)
 
     # esperar ack de A
     while True:
-      seg_bytes, addr = self.udp_socket.recvfrom(buff_size)
-      seg = self.parse_segment(seg_bytes)
-      if seg["ACK"] == 1 and addr == self.dest_address:
-        self.seq += seg["SEQ"] + 1
-        break
-
+      self.udp_socket.sendto(fin, self.dest_address)
+      try:
+        seg_bytes, addr = self.udp_socket.recvfrom(buff_size)
+        seg = self.parse_segment(seg_bytes)
+        if seg["ACK"] == 1 and addr == self.dest_address:
+          self.seq += seg["SEQ"] + 1
+          break
+      except socket.timeout:
+        pass
+    
+    self.udp_socket.settimeout(None)
     self.udp_socket.close()
 
   @staticmethod

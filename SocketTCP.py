@@ -137,6 +137,60 @@ class SocketTCP:
     self.rec_buff = self.rec_buff[buff_size:]
     return devolver
 
+  def close(self):
+    # fin manejado por A
+    buff_size = self.HEADER_SIZE + 16 
+    # enviar fin a b
+    fin = self.create_segment({
+            "SYN": 0, "ACK": 0, "FIN": 1,
+            "SEQ": self.seq, "DATOS": b""
+      })
+    self.udp_socket.sendto(fin, self.dest_address)
+
+    # esperar fin y ack de b
+    while True:
+      seg_bytes, addr = self.udp_socket.recvfrom(buff_size)
+      seg = self.parse_segment(seg_bytes)
+      if seg["ACK"] == 1 and seg["FIN"] == 1 and addr == self.dest_address:
+        self.seq = seg["SEQ"] + 1
+        break
+
+    # enviar ack final
+    fin_final = self.create_segment({
+            "SYN": 0, "ACK": 1, "FIN": 0,
+            "SEQ": self.seq, "DATOS": b""
+      })
+    self.udp_socket.sendto(fin_final, self.dest_address)
+    self.udp_socket.close()
+
+  def recv_close(self):
+    # fin manejado por B
+    buff_size = self.HEADER_SIZE + 16 
+    # esperar fin de A
+    while True:
+      seg_bytes, addr = self.udp_socket.recvfrom(buff_size)
+      seg = self.parse_segment(seg_bytes)
+      if seg["FIN"] == 1 and seg["ACK"] == 1 and addr == self.dest_address:
+        self.seq = seg["SEQ"] + 1;
+        break
+
+    # enviar fin + ack final
+    fin = self.create_segment({
+            "SYN": 0, "ACK": 1, "FIN": 1,
+            "SEQ": self.seq, "DATOS": b""
+      })
+    self.udp_socket.sendto(fin, self.dest_address)
+
+    # esperar ack de A
+    while True:
+      seg_bytes, addr = self.udp_socket.recvfrom(buff_size)
+      seg = self.parse_segment(seg_bytes)
+      if seg["ACK"] == 1 and addr == self.dest_address:
+        self.seq += seg["SEQ"] + 1
+        break
+
+    self.udp_socket.close()
+
   @staticmethod
   def parse_segment(segment_bytes): 
     return {
